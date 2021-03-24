@@ -1,6 +1,9 @@
 package search.sol
 
-import scala.math._
+import scala.collection.mutable
+import scala.math.pow
+import scala.math.log
+import scala.xml.{Node, NodeSeq}
 
 /**
  * Provides an XML indexer, produces files for a querier
@@ -9,6 +12,21 @@ import scala.math._
  */
 class Index(val inputFile: String) {
   // TODO : Implement!
+
+  def parse(): String /*mutable.HashMap[Int, String]*/ = {
+    var s = ""
+    val output = new mutable.HashMap[Int, String]()
+    val mainNode: Node = xml.XML.loadFile(inputFile)
+    val pageSeq: NodeSeq = mainNode \ "page"
+    for (node <- pageSeq) {
+      val pageID: Int = (node \ "id").text.replaceAll("\\s","").toInt
+      val pageText: String = (node \ "text").text
+      output + (pageID.toInt -> pageText)
+      s + pageID
+    }
+    output
+    s
+  }
 
   val n = 3
   val delta = 0.0001
@@ -50,11 +68,26 @@ class Index(val inputFile: String) {
       }
     }
   }
+
+  def findIdf(word : String, X: mutable.HashMap[Int, Array[String]]): Double = {
+    var n = 0
+    var ni = 0
+    for ((k, v) <- X) {
+      n += 1
+      if (v.contains(word)) {
+        ni += 1
+      }
+    }
+    log(n/ni)
+  }
 }
+
 
 object Index {
   def main(args: Array[String]) {
     // TODO : Implement!
     System.out.println("Not implemented yet!")
+    //System.out.println(new Index("sol\\\\search\\\\sol\\\\SmallWiki.xml").parse())
+    //System.out.println((xml.XML.loadFile("sol\\\\search\\\\sol\\\\SmallWiki.xml") \ "page" \ "id").text)
   }
 }
