@@ -1,9 +1,10 @@
 package search.sol
 
 import java.io._
+import search.src.FileIO
 
-import search.src.{FileIO}
-
+import scala.collection
+import scala.collection.mutable
 import scala.collection.mutable.HashMap
 
 /**
@@ -37,7 +38,45 @@ class Query(titleIndex: String, documentIndex: String, wordIndex: String,
    * @param userQuery - the query text
    */
   private def query(userQuery: String) {
-    // TODO : Fill this in
+
+
+    def calcRank(words : Array[String]) {
+      val idsToPageScores = new mutable.HashMap[Int, Double]()
+      for ((k, v) <- idsToPageRank) {
+        var totalPageScore = 0.0
+        for (a <- words) {
+          var dummyVar = wordsToDocumentFrequencies(a)(k)
+          totalPageScore += dummyVar
+        }
+        if (usePageRank) {
+          totalPageScore = totalPageScore * v
+        }
+        idsToPageScores += (k -> totalPageScore)
+      }
+      val rankingList = new Array[(Int, Double)](10)
+      var counter = 0
+      for ((k, v) <- idsToPageScores) {
+        if (!(v == 0)) {
+          if (counter < 10) {
+            rankingList(counter) = (k, v)
+            counter += 1
+          } else {
+            rankingList.sortBy(_._2)
+            if (v > rankingList(0)._2) {
+              rankingList(0) = (k, v)
+            }
+            rankingList.sortBy(_._2)
+          }
+        }
+      }
+      if (counter == 0) {
+        print("Fuck u")
+      } else {
+        for (i <- counter to 1) {
+          println(idsToTitle(rankingList(i)._1))
+        }
+      }
+    }
     println("Implement query!")
   }
 
@@ -52,7 +91,7 @@ class Query(titleIndex: String, documentIndex: String, wordIndex: String,
     }
   }
 
-  /*
+  /**
    * Reads in the text files.
    */
   def readFiles(): Unit = {
@@ -89,6 +128,9 @@ class Query(titleIndex: String, documentIndex: String, wordIndex: String,
 
     inputReader.close()
   }
+
+  //AAAAAA THIS IS WHY I WROTE DA CODE IT BE HERE WHO KNOWS IF THIS IS THE RIGHT PLACE
+
 }
 
 object Query {
