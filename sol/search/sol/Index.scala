@@ -7,7 +7,7 @@ import search.src.PorterStemmer
 import scala.math.{log, pow}
 import scala.xml.{Node, NodeSeq}
 import scala.collection.mutable
-import scala.collection.mutable.HashMap
+import scala.collection.mutable.ArrayBuffer
 import scala.util.matching.Regex
 
 
@@ -39,19 +39,18 @@ class Index(val inputFile: String) {
     val linkRegex = new Regex("""\[\[[^\[]+?\]\]""")
     val scaryRegex = new Regex("""[^\W_]+'[^\W_]+|[^\W_]+""")
 
+    val allWords = regexToArray(scaryRegex, pageText)
+
     val allLinks = regexToArray(linkRegex, pageText)
-    val wordsFromLinks = mutable.ArrayBuffer
+    var linkWords: Array[String] = Array()
     for (link <- allLinks) {
-      if (link.contains("|")) {
+      if (link contains "|") {
         val splitLink = link.split("""\|""")
-        wordsFromLinks ++: splitLink(1).split(""" |]""")
+        linkWords = linkWords ++: splitLink(0).split(""" |\[""")
       }
     }
-    wordsFrom
 
-    val words = regexToArray(scaryRegex, pageText)
-    //words ++: wordsFromLinks
-
+    val words = allWords.filter(!linkWords.contains(_))
     val filteredWords = words.filter(!StopWords.isStopWord(_))
     PorterStemmer.stemArray(filteredWords)
   }
@@ -59,11 +58,16 @@ class Index(val inputFile: String) {
   private val delta: Double = 0.0001
   private val epsilon: Double = 0.15
   private val pageTextTable: mutable.HashMap[Int, String] = parse("text")
+
   private val pageTokenTable: mutable.HashMap[Int, Array[String]] = {
     val output = new mutable.HashMap[Int, Array[String]]()
-    for ((k,v) <- pageTextTable) output + (k -> tokenize(v))
+    for ((k,v) <- pageTextTable) {
+      output += (k -> tokenize(v))
+      print(output(k).mkString("Array(", ", ", ")"))
+    }
     output
   }
+
   private val idsToMaxFreqs: mutable.HashMap[Int, Double] = {
     val output = new mutable.HashMap[Int, Double]()
     for ((k, v) <- pageTokenTable) {
@@ -98,8 +102,6 @@ class Index(val inputFile: String) {
     output
   }
 
-
-
   def linksTo(j: Int, k: Int): Boolean = {
     pageTextTable(k).contains("[[" + pageTitleTable(j) + "]]") ||
     pageTextTable(k).contains("[[" + pageTitleTable(j) + "|")
@@ -126,20 +128,14 @@ class Index(val inputFile: String) {
         }
       }
     }
-    for (j <- range(0, n-1))
+    val rankMap = new mutable.HashMap[Int, Double]
+    for (j <- Range(0, n-1)) {
+      rankMap += (j -> nextRanks(j))
+    }
+    rankMap
   }
 
-  def findIdf(word: String): Double = {
-    var n = 0
-    var ni = 0
-    for ((k, v) <- pageTokenTable) {
-      n += 1
-      if (v.contains(word)) {
-        ni += 1
-      }
-    }
-    log(n / ni)
-  }
+
 
   def smallHashTable(word: String): mutable.HashMap[Int, Double] = {
     val numHshMap = new mutable.HashMap[Int, Double]()
@@ -149,14 +145,15 @@ class Index(val inputFile: String) {
         if (word == b) {
           occur += 1
         }
-        val tfIdf = (occur / idsToMaxFreqs(k)) * findIdf(word)
-        numHshMap += (k -> tfIdf)
+        if (occur > 0) {
+          numHshMap += (k -> occur)
+        }
       }
     }
     numHshMap
   }
 
-  def findTf(): mutable.HashMap[String, mutable.HashMap[Int, Double]] = {
+  val wordsToDocumentFrequencies: mutable.HashMap[String, mutable.HashMap[Int, Double]] = {
     val bigHshMap = new mutable.HashMap[String, mutable.HashMap[Int, Double]]()
     for ((k,v) <- pageTokenTable) {
       for (a <- v) {
@@ -170,16 +167,20 @@ class Index(val inputFile: String) {
 }
 
 
-
 object Index {
   def main(args: Array[String]) {
-
+    // "sol\\search\\sol\\SmallWiki.xml"
+    if (args.length != 1) {
+      println("Incorrect usage: please enter the directory to the XML file")
+      System.exit(1)
+    }
     val indexer = new Index(args(0))
-    printTitleFile(titleFile, indexer.pageTitleTable)
-    printDocumentFile(documentFile,  indexer.idsToMaxFreqs, indexer.pageRank())
-    printWordsFile(wordsFile, indexer.findTf())
-
-
-    print(indexer.tokenize("THis is the text and words and stuff plus more rouiwbfvweui [[routines]] and [[happy|stuff]] too").mkString("Array(", ", ", ")"))
+    printTitleFile("sol\\search\\sol\\titles.txt", indexer.pageTitleTable)
+    printDocumentFile("sol\\search\\sol\\docs.txt",  indexer.idsToMaxFreqs, indexer.pageRank())
+    printWordsFile("sol\\search\\sol\\words.txt", indexer.wordsToDocumentFrequencies)
+    print(indexer.pageTextTable.toString)
+    print(indexer.pageTokenTable.toString)
+    //val line = "THis is the text and words and stuff plus more [[Hammer]] [[Presidents|Washington]] [[Category:Computer Science]] rouiwbfvweui [[routines]] and [[happy|stuff]] too"
+    //print(indexer.tokenize(line).mkString("Array(", ", ", ")"))
   }
 }

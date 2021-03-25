@@ -6,6 +6,7 @@ import search.src.FileIO
 import scala.collection
 import scala.collection.mutable
 import scala.collection.mutable.HashMap
+import scala.math.log
 
 /**
  * Represents a query REPL built off of a specified index
@@ -39,13 +40,13 @@ class Query(titleIndex: String, documentIndex: String, wordIndex: String,
    */
   private def query(userQuery: String) {
 
-
     def calcRank(words : Array[String]) {
       val idsToPageScores = new mutable.HashMap[Int, Double]()
       for ((k, v) <- idsToPageRank) {
         var totalPageScore = 0.0
         for (a <- words) {
-          var dummyVar = wordsToDocumentFrequencies(a)(k)
+          var dummyVar = (wordsToDocumentFrequencies(a)(k) / idsToMaxFreqs(k)) *
+            log(idsToTitle.size / wordsToDocumentFrequencies(a).size)
           totalPageScore += dummyVar
         }
         if (usePageRank) {
