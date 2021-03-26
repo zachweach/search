@@ -4,10 +4,9 @@ import search.src.FileIO._
 import search.src.StopWords
 import search.src.PorterStemmer
 
-import scala.math.{log, pow}
+import scala.math.{pow, sqrt}
 import scala.xml.{Node, NodeSeq}
 import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
 import scala.util.matching.Regex
 
 
@@ -63,27 +62,27 @@ class Index(val inputFile: String) {
     val output = new mutable.HashMap[Int, Array[String]]()
     for ((k,v) <- pageTextTable) {
       output += (k -> tokenize(v))
-      print(output(k).mkString("Array(", ", ", ")"))
     }
     output
   }
 
   private val idsToMaxFreqs: mutable.HashMap[Int, Double] = {
     val output = new mutable.HashMap[Int, Double]()
+
     for ((k, v) <- pageTokenTable) {
-      val hshMap = new mutable.HashMap[String, Double]()
-      for (a <- v) { //find the most common value
-        if (hshMap.contains(a)) { // if already exists then update count.
-          hshMap(a) = hshMap.getOrElse(a, 0.0) + 1.0
-        }
-        else hshMap += (a -> 1.0) // else insert it in the map.
+      val wordsToFreqs = new mutable.HashMap[String, Double]()
+
+      for (word <- v) { //find the most common value
+        wordsToFreqs(word) = wordsToFreqs.getOrElse(word, 0.0) + 1.0
       }
+
       var maxNum = 0.0
-      for ((k, v) <- hshMap) { // fetch the # of times most common value occurs
+      for ((k, v) <- wordsToFreqs) { // fetch the # of times most common value occurs
         if (v > maxNum) {
           maxNum = v
         }
       }
+
       output += (k -> maxNum)
     }
     output
@@ -92,15 +91,7 @@ class Index(val inputFile: String) {
   private val pageTitleTable: mutable.HashMap[Int, String] = parse("title")
   private val n: Int = pageTitleTable.size
 
-  def distance(prev: Array[Double], next: Array[Double]): Double = {
-    var output = 0.0
-    var i = 0
-    for (r <- prev) {
-      output = output + pow(next(i) - r, 2)
-      i += 1
-    }
-    output
-  }
+
 
   def linksTo(j: Int, k: Int): Boolean = {
     pageTextTable(k).contains("[[" + pageTitleTable(j) + "]]") ||
@@ -115,22 +106,32 @@ class Index(val inputFile: String) {
     }
   }
 
-  def pageRank(): mutable.HashMap[Int, Double] = {
-    var prevRanks = Array.fill(n)(0.0)
-    val nextRanks = Array.fill(n)(1.0 / n)
+  def distance(prevNext: mutable.HashMap[Int, (Double, Double)]): Double = {
+    var output = 0.0
+    for ((k,v) <- prevNext) {
+      output = output + pow(v._2 - v._1, 2)
+    }
+    sqrt(output)
+  }
 
-    while (distance(prevRanks, nextRanks) > delta) {
-      prevRanks = nextRanks
-      for (j <- Range(0, n - 1)) {
-        nextRanks(j) = 0
-        for (k <- Range(0, n - 1)) {
-          nextRanks(j) = nextRanks(j) + (weight(j, k) * prevRanks(k))
+  def pageRank(): mutable.HashMap[Int, Double] = {
+    var ranksAndIDs: mutable.HashMap[Int, (Double, Double)] = new mutable.HashMap()
+    for ((k,v) <- pageTitleTable) {
+      ranksAndIDs += (k -> (0.0, 1.0/n))
+    }
+
+    while (distance(ranksAndIDs) > delta) {
+      for ((k,v) <- pageTitleTable) {
+        ranksAndIDs(k) = (ranksAndIDs(k)._2, 0)
+        for ((key,v) <- pageTitleTable) {
+          ranksAndIDs(k) = (ranksAndIDs(k)._1, ranksAndIDs(k)._2 + (weight(k, key) * ranksAndIDs(key)._1))
         }
       }
     }
+
     val rankMap = new mutable.HashMap[Int, Double]
-    for (j <- Range(0, n-1)) {
-      rankMap += (j -> nextRanks(j))
+    for ((k,v) <- ranksAndIDs) {
+      rankMap += (k -> v._2)
     }
     rankMap
   }
@@ -178,8 +179,6 @@ object Index {
     printTitleFile("sol\\search\\sol\\titles.txt", indexer.pageTitleTable)
     printDocumentFile("sol\\search\\sol\\docs.txt",  indexer.idsToMaxFreqs, indexer.pageRank())
     printWordsFile("sol\\search\\sol\\words.txt", indexer.wordsToDocumentFrequencies)
-    print(indexer.pageTextTable.toString)
-    print(indexer.pageTokenTable.toString)
     //val line = "THis is the text and words and stuff plus more [[Hammer]] [[Presidents|Washington]] [[Category:Computer Science]] rouiwbfvweui [[routines]] and [[happy|stuff]] too"
     //print(indexer.tokenize(line).mkString("Array(", ", ", ")"))
   }

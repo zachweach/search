@@ -3,7 +3,6 @@ package search.sol
 import java.io._
 import search.src.FileIO
 
-import scala.collection
 import scala.collection.mutable
 import scala.collection.mutable.HashMap
 import scala.math.log
@@ -73,9 +72,13 @@ class Query(titleIndex: String, documentIndex: String, wordIndex: String,
       if (counter == 0) {
         print("Fuck u")
       } else {
-        for (i <- counter to 1) {
-          println(idsToTitle(rankingList(i)._1))
+        val topPages: Array[Int] = Array(10)
+        var i = 0
+        for (page <- rankingList) {
+          topPages.update(i, page._1)
+          i += 1
         }
+        printResults(topPages)
       }
     }
     println("Implement query!")
