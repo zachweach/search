@@ -4,6 +4,8 @@ import search.src.FileIO._
 import search.src.StopWords
 import search.src.PorterStemmer
 
+import java.util
+import java.util.Calendar
 import scala.math.{pow, sqrt}
 import scala.xml.{Node, NodeSeq}
 import scala.collection.mutable
@@ -17,13 +19,30 @@ import scala.util.matching.Regex
  */
 class Index(val inputFile: String) {
 
+  private val delta: Double = 0.0001
+  private val epsilon: Double = 0.15
+  val linkRegex: Regex = new Regex("""\[\[[^\[]+?\]\]""")
+  val scaryRegex = new Regex("""[^\W_]+'[^\W_]+|[^\W_]+""")
+
+  private val pageTitleTable: mutable.HashMap[Int, String] = parse("title")
+  private val n: Int = pageTitleTable.size
+
+  private val pageTextTable: mutable.HashMap[Int, String] = parse("text")
+  private val pageTokenTable: mutable.HashMap[Int, Array[String]] = {
+    val output = new mutable.HashMap[Int, Array[String]]()
+    for ((k, v) <- pageTextTable) {
+      output += (k -> tokenize(v))
+    }
+    output
+  }
+
   def parse(tag: String): mutable.HashMap[Int, String] = {
     var output = new mutable.HashMap[Int, String]()
     val mainNode: Node = xml.XML.loadFile(inputFile)
     val pageSeq: NodeSeq = mainNode \ "page"
     for (node <- pageSeq) {
       val pageID: Int = (node \ "id").text.replaceAll("\\s", "").toInt
-      val pageTag: String = (node \ tag).text
+      val pageTag: String = (node \ tag).text.trim
       output += (pageID -> pageTag)
     }
     output
@@ -31,21 +50,18 @@ class Index(val inputFile: String) {
 
   def regexToArray(regex: Regex, pageText: String): Array[String] = {
     val matchesIterator = regex.findAllMatchIn(pageText)
-    matchesIterator.toArray.map { aMatch => aMatch.matched }
+    matchesIterator.toArray.map { aMatch => aMatch.matched.toLowerCase }
   }
 
   def tokenize(pageText: String): Array[String] = {
-    val linkRegex = new Regex("""\[\[[^\[]+?\]\]""")
-    val scaryRegex = new Regex("""[^\W_]+'[^\W_]+|[^\W_]+""")
-
     val allWords = regexToArray(scaryRegex, pageText)
 
     val allLinks = regexToArray(linkRegex, pageText)
     var linkWords: Array[String] = Array()
     for (link <- allLinks) {
-      if (link contains "|") {
+      if (link.contains("|")) {
         val splitLink = link.split("""\|""")
-        linkWords = linkWords ++: splitLink(0).split(""" |\[""")
+        linkWords = linkWords ++: regexToArray(scaryRegex, splitLink(0))
       }
     }
 
@@ -54,53 +70,71 @@ class Index(val inputFile: String) {
     PorterStemmer.stemArray(filteredWords)
   }
 
-  private val delta: Double = 0.0001
-  private val epsilon: Double = 0.15
-  private val pageTextTable: mutable.HashMap[Int, String] = parse("text")
 
-  private val pageTokenTable: mutable.HashMap[Int, Array[String]] = {
-    val output = new mutable.HashMap[Int, Array[String]]()
-    for ((k,v) <- pageTextTable) {
-      output += (k -> tokenize(v))
-    }
-    output
-  }
 
-  private val idsToMaxFreqs: mutable.HashMap[Int, Double] = {
+  private def idsToMaxFreqs(): mutable.HashMap[Int, Double] = {
     val output = new mutable.HashMap[Int, Double]()
+    val wordsToFreqs: mutable.HashMap[String, Double] = mutable.HashMap()
 
     for ((k, v) <- pageTokenTable) {
-      val wordsToFreqs = new mutable.HashMap[String, Double]()
-
-      for (word <- v) { //find the most common value
+      for (word <- v) {
         wordsToFreqs(word) = wordsToFreqs.getOrElse(word, 0.0) + 1.0
       }
 
-      var maxNum = 0.0
-      for ((k, v) <- wordsToFreqs) { // fetch the # of times most common value occurs
-        if (v > maxNum) {
-          maxNum = v
-        }
-      }
-
-      output += (k -> maxNum)
+      output += (k -> wordsToFreqs.values.max)
+      wordsToFreqs.clear()
     }
     output
   }
 
-  private val pageTitleTable: mutable.HashMap[Int, String] = parse("title")
-  private val n: Int = pageTitleTable.size
+  def findValidLinks(k: Int): Array[String] = {
+    val regexMatches: Array[Regex.Match] = linkRegex.findAllMatchIn(pageTextTable(k)).toArray
+    val linkRegexArrayUnfiltered: Array[String] = regexMatches.map(_.matched)
+    val linkRegexArray = linkRegexArrayUnfiltered.filter(_ == null)
 
+    val linkRegexMatches = linkRegexArray.toBuffer
+    for (link <- linkRegexMatches) {
+      if (link.equals("[[" + pageTitleTable(k) + "]]") || link.contains("[[" + pageTitleTable(k) + "|")) {
+        linkRegexMatches -= link
+      }
+    }
 
+    linkRegexMatches.toArray
+  }
 
   def linksTo(j: Int, k: Int): Boolean = {
-    pageTextTable(k).contains("[[" + pageTitleTable(j) + "]]") ||
-    pageTextTable(k).contains("[[" + pageTitleTable(j) + "|")
+    val linkRegexMatches = findValidLinks(k)
+
+    if (j.equals(k)) {
+      false
+    } else if (linkRegexMatches.isEmpty) {
+      true
+    } else {
+      pageTextTable(k).contains("[[" + pageTitleTable(j) + "]]") ||
+        pageTextTable(k).contains("[[" + pageTitleTable(j) + "|")
+    }
   }
 
   def weight(j: Int, k: Int): Double = {
+    val linkRegexMatches = findValidLinks(k)
+
     if (linksTo(j, k)) {
-      (epsilon / n) + (1 - epsilon) * (1 / n)
+      if (linkRegexMatches.isEmpty) {
+        (epsilon / n) + ((1.0 - epsilon) * (1.0 / (n - 1.0)))
+      } else {
+        var linkWords: Set[String] = Set()
+        for (link <- linkRegexMatches) {
+          if (link contains "|") {
+            val splitLink = link.split("""\|""")
+            linkWords = linkWords + splitLink(0).stripPrefix("[[").trim
+          } else {
+            val splitLink = link.stripPrefix("[[").stripSuffix("]]").trim
+            linkWords = linkWords + splitLink
+          }
+        }
+        val nk = linkWords.size
+        (epsilon / n) + ((1.0 - epsilon) * (1.0 / nk))
+      }
     } else {
       epsilon / n
     }
@@ -122,8 +156,10 @@ class Index(val inputFile: String) {
 
     while (distance(ranksAndIDs) > delta) {
       for ((k,v) <- pageTitleTable) {
-        ranksAndIDs(k) = (ranksAndIDs(k)._2, 0)
-        for ((key,v) <- pageTitleTable) {
+        ranksAndIDs(k) = (ranksAndIDs(k)._2, 0.0)
+      }
+      for ((k,v) <- pageTitleTable) {
+        for ((key,va) <- pageTitleTable) {
           ranksAndIDs(k) = (ranksAndIDs(k)._1, ranksAndIDs(k)._2 + (weight(k, key) * ranksAndIDs(key)._1))
         }
       }
@@ -137,32 +173,30 @@ class Index(val inputFile: String) {
   }
 
 
-
   def smallHashTable(word: String): mutable.HashMap[Int, Double] = {
-    val numHshMap = new mutable.HashMap[Int, Double]()
-    for ((k,v) <- pageTokenTable) {
-      var occur = 0
-      for (b <- v) {
-        if (word == b) {
-          occur += 1
-        }
-        if (occur > 0) {
-          numHshMap += (k -> occur)
-        }
+    val numHshMap: mutable.HashMap[Int, Double] = mutable.HashMap()
+    for ((k, v) <- pageTokenTable) {
+      val count = v.count(_.equals(word))
+      if (count != 0.0) {
+        numHshMap += (k -> count)
       }
     }
     numHshMap
   }
 
-  val wordsToDocumentFrequencies: mutable.HashMap[String, mutable.HashMap[Int, Double]] = {
-    val bigHshMap = new mutable.HashMap[String, mutable.HashMap[Int, Double]]()
-    for ((k,v) <- pageTokenTable) {
-      for (a <- v) {
-        if (!bigHshMap.contains(a)) {
-          bigHshMap += (a -> smallHashTable(a))
-        }
-      }
+  def allWords(): Set[String] = {
+    var totalWords: Set[String] = Set()
+    for (words <- pageTokenTable.values) {
+      totalWords ++= words
     }
+    totalWords
+  }
+
+  def wordsToDocumentFrequencies(): mutable.HashMap[String, mutable.HashMap[Int, Double]] = {
+    var bigHshMap: mutable.HashMap[String, mutable.HashMap[Int, Double]] = mutable.HashMap()
+    for (word <- allWords()) {
+      bigHshMap += (word -> smallHashTable(word))
+      }
     bigHshMap
   }
 }
@@ -172,13 +206,25 @@ object Index {
   def main(args: Array[String]) {
     // "sol\\search\\sol\\SmallWiki.xml"
     if (args.length != 1) {
-      println("Incorrect usage: please enter the directory to the XML file")
+      println("Incorrect usage: please enter the path to the XML file")
       System.exit(1)
     }
+    var now = Calendar.getInstance()
+    print("Started: " + now.get(Calendar.HOUR_OF_DAY) + ":" + now.get(Calendar.MINUTE))
+
     val indexer = new Index(args(0))
+    now = Calendar.getInstance()
+    print("Finished indexer: " + now.get(Calendar.HOUR_OF_DAY) + ":" + now.get(Calendar.MINUTE))
     printTitleFile("sol\\search\\sol\\titles.txt", indexer.pageTitleTable)
-    printDocumentFile("sol\\search\\sol\\docs.txt",  indexer.idsToMaxFreqs, indexer.pageRank())
-    printWordsFile("sol\\search\\sol\\words.txt", indexer.wordsToDocumentFrequencies)
+    now = Calendar.getInstance()
+    print("Finished pageTitleTable: " + now.get(Calendar.HOUR_OF_DAY) + ":" + now.get(Calendar.MINUTE))
+    printDocumentFile("sol\\search\\sol\\docs.txt",  indexer.idsToMaxFreqs(), indexer.pageRank())
+    now = Calendar.getInstance()
+    print("Finished idtoMF and pageRank: " + now.get(Calendar.HOUR_OF_DAY) + ":" + now.get(Calendar.MINUTE))
+    printWordsFile("sol\\search\\sol\\words.txt", indexer.wordsToDocumentFrequencies())
+    now = Calendar.getInstance()
+    print("Finished wordsToDF (END): " + now.get(Calendar.HOUR_OF_DAY) + ":" + now.get(Calendar.MINUTE))
+    //print(indexer.allWords)
     //val line = "THis is the text and words and stuff plus more [[Hammer]] [[Presidents|Washington]] [[Category:Computer Science]] rouiwbfvweui [[routines]] and [[happy|stuff]] too"
     //print(indexer.tokenize(line).mkString("Array(", ", ", ")"))
   }

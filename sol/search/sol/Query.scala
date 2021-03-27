@@ -1,11 +1,12 @@
 package search.sol
 
 import java.io._
-import search.src.FileIO
+import search.src.{FileIO, PorterStemmer, StopWords}
 
 import scala.collection.mutable
 import scala.collection.mutable.HashMap
 import scala.math.log
+import scala.util.matching.Regex
 
 /**
  * Represents a query REPL built off of a specified index
@@ -39,49 +40,53 @@ class Query(titleIndex: String, documentIndex: String, wordIndex: String,
    */
   private def query(userQuery: String) {
 
-    def calcRank(words : Array[String]) {
-      val idsToPageScores = new mutable.HashMap[Int, Double]()
+    def regexToArray(regex: Regex, pageText: String): Array[String] = {
+      val matchesIterator = regex.findAllMatchIn(pageText)
+      matchesIterator.toArray.map { aMatch => aMatch.matched.toLowerCase }
+    }
+
+    val scaryRegex = new Regex("""[^\W_]+'[^\W_]+|[^\W_]+""")
+    val justWords = regexToArray(scaryRegex, userQuery).filter(!StopWords.isStopWord(_))
+    val words = PorterStemmer.stemArray(justWords)
+    calcRank(words)
+
+
+    def calcScore(page: Int, word: String): Double = {
+      (wordsToDocumentFrequencies(word).getOrElse(page, 0.0) / idsToMaxFreqs(page)) *
+        log(idsToTitle.size / wordsToDocumentFrequencies(word).size)
+    }
+
+    def calcRank(queryWords: Array[String]) {
+      val idsToPageScores: mutable.Buffer[(Int, Double)] = mutable.Buffer()
+
       for ((k, v) <- idsToPageRank) {
         var totalPageScore = 0.0
-        for (a <- words) {
-          var dummyVar = (wordsToDocumentFrequencies(a)(k) / idsToMaxFreqs(k)) *
-            log(idsToTitle.size / wordsToDocumentFrequencies(a).size)
-          totalPageScore += dummyVar
+
+        for (word <- queryWords) {
+          if (wordsToDocumentFrequencies.contains(word)) {
+            totalPageScore = totalPageScore + calcScore(k, word)
+          }
         }
+
         if (usePageRank) {
           totalPageScore = totalPageScore * v
         }
-        idsToPageScores += (k -> totalPageScore)
-      }
-      val rankingList = new Array[(Int, Double)](10)
-      var counter = 0
-      for ((k, v) <- idsToPageScores) {
-        if (!(v == 0)) {
-          if (counter < 10) {
-            rankingList(counter) = (k, v)
-            counter += 1
-          } else {
-            rankingList.sortBy(_._2)
-            if (v > rankingList(0)._2) {
-              rankingList(0) = (k, v)
-            }
-            rankingList.sortBy(_._2)
-          }
+
+        if (totalPageScore != 0.0) {
+          val score = (k, totalPageScore)
+          idsToPageScores += score
         }
       }
-      if (counter == 0) {
-        print("Fuck u")
+
+      val rankingList = idsToPageScores.toArray
+      rankingList.sortBy(_._2)
+
+      if (rankingList.isEmpty) {
+        println("Could not find input on any pages. Try another query.")
       } else {
-        val topPages: Array[Int] = Array(10)
-        var i = 0
-        for (page <- rankingList) {
-          topPages.update(i, page._1)
-          i += 1
-        }
-        printResults(topPages)
+        printResults(rankingList.map(_._1))
       }
     }
-    println("Implement query!")
   }
 
   /**
@@ -132,9 +137,6 @@ class Query(titleIndex: String, documentIndex: String, wordIndex: String,
 
     inputReader.close()
   }
-
-  //AAAAAA THIS IS WHY I WROTE DA CODE IT BE HERE WHO KNOWS IF THIS IS THE RIGHT PLACE
-
 }
 
 object Query {
