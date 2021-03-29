@@ -3,7 +3,6 @@ package search.sol
 import java.io._
 import search.src.{FileIO, PorterStemmer, StopWords}
 
-import java.util.Calendar
 import scala.collection.mutable
 import scala.collection.mutable.HashMap
 import scala.math.log
@@ -128,13 +127,9 @@ class Query(titleIndex: String, documentIndex: String, wordIndex: String,
         return
       }
 
-      val pre = Calendar.getInstance()
       // Handle the query for the single line of input
       query(userQuery)
-      val done = Calendar.getInstance()
-      val timeSec = done.get(Calendar.SECOND) - pre.get(Calendar.SECOND)
-      val timeMS = done.get(Calendar.MILLISECOND) - pre.get(Calendar.MILLISECOND)
-      println("Ran in " + timeSec + "s and " + timeMS + "ms.")
+
       // Print next query prompt and read next line of input
       print("search> ")
       userQuery = inputReader.readLine()

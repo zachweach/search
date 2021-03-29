@@ -1,0 +1,107 @@
+---------- Instructions for Use ---------------------------------------------------------------------------------------
+
+Before any querying can begin, the indexer must be run. It takes exactly one argument, which
+is the filepath that leads to a valid XML file. This program will write three files--titles.txt,
+docs.txt, and words.txt--all of which will be used to query the document. Once the indexer has
+completed, you will be able to query that file via the querier.
+
+The querier takes in either three or four arguments. If you would like to use PageRank in your
+queries, the first argument to the querier should be "--pagerank", followed by the filepaths
+that lead to the title index (titles.txt), the document index (docs.txt), and the word index
+(words.txt) in that order. If you would not like to use PageRank, simply omit the argument
+"--pagerank" and keep the remaining three arguments in order.
+
+Once the arguments have been passed to the querier, you can begin your search of the document.
+When prompted by the term "search", enter the word(s) that you would like to query. After, the
+results will be printed. To search with another query, simply enter the words(s) when prompted
+again. To end the query, enter ":quit" into the search prompt.
+
+
+-----------------------------------------------------------------------------------------------------------------------
+A brief overview of your design, including how the pieces of your program fit.
+
+Indexer:
+XML files are indexed in 4 main parts:
+1) pageTitleTable, which is a HashMap that maps each unique page ID to the title of the corresponding page
+a) An additional HashMap, pageTitlesToIDS, is created here as well that maps page titles to their unique
+page IDs. This HashMap is used in the later calculations for PageRank.
+
+2) idsToMaxFreqs(), which creates a HashMap that maps each unique page ID to the number of times the most commonly
+used word on the page appears on the page. This is achieved by going through pageTokenTable (a HashMap of page IDs
+mapped to an array of the tokenized version of all the words that appear on that page), counting how many times
+each word appears on that page and finding the maximum value from there.
+
+3) pageRank(), which creates a HashMap that maps each page ID to its ranking (in the local variable rankMap).
+It uses helper methods that:
+a) check if one page links to another (accounting for the special cases) by checking pageLinksTable (linksTo)
+    i) pageLinksTable is a HashMap created at the same time as the indexer itself that maps page IDs to a set
+    of all the pageIDs that this page links to
+b) calculate the weight of each pair of pages, accounting for the special cases (weight)
+c) calculate the distance between iterations of the ranking (distance)
+
+4) wordsToDocumentFrequencies(), which creates a HashMap that maps each word that appears in the corpus
+to a hashtable that maps each page ID to the number of times the word appears on that page. This is achieved
+by looping through each page, looking at each word on that page and either adding it to the big hashmap if
+it doesn't exist yet, or updating the value for that page on the small hashmap if it does.
+
+
+Querier:
+The querier runs its calculations by using the data structures that were created in the indexer. After
+the user has submitted a query, the input is appropriately tokenized and stored as the local variable
+"words". The helped method calcRank() is then called, which calculates the total page score for each page
+based on the input query words (via the helper method calcRank() and, if used, the PageRank of each page).
+The results are stored as the local variable "idsToPageScores", which is a Buffer of tuples, each containing
+the page IDs and their associated scores. Then, this Buffer is converted into an array and sorted from highest
+to lowest score and the helper method printResults() prints the top 10 results (or fewer if less than 10
+matching pages were found). If no results are found, "Could not find input on any pages. Try another query."
+is printed.
+
+
+-----------------------------------------------------------------------------------------------------------------------
+A description of features you failed to implement, as well as any extra features you implemented.
+
+We did not fail to implement any features. We did not implement any additional features.
+
+
+-----------------------------------------------------------------------------------------------------------------------
+A description of any known bugs in your program.
+
+There are no known bugs in this program.
+
+
+-----------------------------------------------------------------------------------------------------------------------
+A description of how you tested your program.
+
+Tests:
+Indexer:
+1. Used PageRankWiki to test if the pagerank was working correctly
+2. test a corpus containing no pages to links with other pages in the corpus
+3. Test a page with a link to only itself
+4. Test a page that links to a page outside the corpus
+5. Test a page that links to nothing
+6. test a page with links to itself and other pages in the corpus
+7. test a page with multiple links to the same page
+8. Check pages with both [[aaaa]] links and [[aaa|bbbb]] links
+
+
+Other test-related things:
+1. Used the java.util.Calendar library to see how long each part of the process was taking separately
+2. Used intermediate print statements to ensure that we were calculating each intermediate value correctly (used this
+to check if our hashtables were being created correctly as well)
+3. Checked to make sure that total pageRanks were adding up to 1 in the end
+4. Tested the tokenizer alone with the phrase: "THis is the text and words and stuff plus
+more [[Hammer]] [[Presidents|Washington]] [[Category:Computer Science]] Test [[routines]] and [[happy|stuff]] too",
+which was correctly tokenized (in the creation of pageTokenTable).
+
+
+Querier:
+1. Test one word
+2. Test multiple words
+3. Check results against search demos to see if results align
+4. Test to make sure that querying with/without page ranks produces different results
+
+
+-----------------------------------------------------------------------------------------------------------------------
+A list of the people with whom you collaborated.
+
+This project was made from the work of Zachary Weachter and Ethan Mirman. The design was checked by TA Erick Lerena.
