@@ -33,6 +33,8 @@ class Index(val inputFile: String) {
     for ((k, v) <- pageTextTable) {
       output += (k -> tokenize(v))
     }
+    val now = Calendar.getInstance()
+    println("Finished takenTable (sub): " + now.get(Calendar.HOUR_OF_DAY) + ":" + now.get(Calendar.MINUTE) + ":" + now.get(Calendar.SECOND))
     output
   }
 
@@ -77,13 +79,17 @@ class Index(val inputFile: String) {
     val wordsToFreqs: mutable.HashMap[String, Double] = mutable.HashMap()
 
     for ((k, v) <- pageTokenTable) {
-      for (word <- v) {
-        wordsToFreqs(word) = wordsToFreqs.getOrElse(word, 0.0) + 1.0
-      }
+      if (v.nonEmpty) {
+        for (word <- v) {
+          wordsToFreqs(word) = wordsToFreqs.getOrElse(word, 0.0) + 1.0
+        }
 
-      output += (k -> wordsToFreqs.values.max)
-      wordsToFreqs.clear()
+        output += (k -> wordsToFreqs.values.max)
+        wordsToFreqs.clear()
+      }
     }
+    val now = Calendar.getInstance()
+    println("Finished ITMF (sub): " + now.get(Calendar.HOUR_OF_DAY) + ":" + now.get(Calendar.MINUTE) + ":" + now.get(Calendar.SECOND))
     output
   }
 
@@ -163,41 +169,42 @@ class Index(val inputFile: String) {
           ranksAndIDs(k) = (ranksAndIDs(k)._1, ranksAndIDs(k)._2 + (weight(k, key) * ranksAndIDs(key)._1))
         }
       }
+      val now = Calendar.getInstance()
+      println("Done time! (sub): " + now.get(Calendar.HOUR_OF_DAY) + ":" + now.get(Calendar.MINUTE) + ":" + now.get(Calendar.SECOND))
     }
 
     val rankMap = new mutable.HashMap[Int, Double]
     for ((k,v) <- ranksAndIDs) {
       rankMap += (k -> v._2)
     }
+    val now = Calendar.getInstance()
+    println("Finished pageRank (sub): " + now.get(Calendar.HOUR_OF_DAY) + ":" + now.get(Calendar.MINUTE) + ":" + now.get(Calendar.SECOND))
     rankMap
   }
 
-
-  def smallHashTable(word: String): mutable.HashMap[Int, Double] = {
-    val numHshMap: mutable.HashMap[Int, Double] = mutable.HashMap()
-    for ((k, v) <- pageTokenTable) {
-      val count = v.count(_.equals(word))
-      if (count != 0.0) {
-        numHshMap += (k -> count)
+  def wordsAh(): mutable.HashMap[String, mutable.HashMap[Int, Double]] = {
+    val wordPageCount: mutable.HashMap[String, mutable.HashMap[Int, Double]] = mutable.HashMap()
+    for ((k,v) <- pageTokenTable) {
+      for (word <- v) {
+        if (!wordPageCount.contains(word)) {
+          val newWord: mutable.HashMap[Int, Double] = mutable.HashMap()
+          newWord.put(k, 1.0)
+          wordPageCount.put(word, newWord)
+        } else {
+          wordPageCount(word).update(k, wordPageCount(word).getOrElse(k, 0.0) + 1)
+        }
       }
     }
-    numHshMap
+    wordPageCount
   }
 
-  def allWords(): Set[String] = {
-    var totalWords: Set[String] = Set()
-    for (words <- pageTokenTable.values) {
-      totalWords ++= words
+  val placeHolder: mutable.HashMap[Int, Double] = {
+    val smth = new mutable.HashMap[Int, Double]()
+    for ((k,v) <- pageTitleTable) {
+      val score = (k, 0.0)
+      smth += score
     }
-    totalWords
-  }
-
-  def wordsToDocumentFrequencies(): mutable.HashMap[String, mutable.HashMap[Int, Double]] = {
-    var bigHshMap: mutable.HashMap[String, mutable.HashMap[Int, Double]] = mutable.HashMap()
-    for (word <- allWords()) {
-      bigHshMap += (word -> smallHashTable(word))
-      }
-    bigHshMap
+    smth
   }
 }
 
@@ -210,20 +217,20 @@ object Index {
       System.exit(1)
     }
     var now = Calendar.getInstance()
-    print("Started: " + now.get(Calendar.HOUR_OF_DAY) + ":" + now.get(Calendar.MINUTE))
+    println("Started: " + now.get(Calendar.HOUR_OF_DAY) + ":" + now.get(Calendar.MINUTE) + ":" + now.get(Calendar.SECOND))
 
     val indexer = new Index(args(0))
     now = Calendar.getInstance()
-    print("Finished indexer: " + now.get(Calendar.HOUR_OF_DAY) + ":" + now.get(Calendar.MINUTE))
+    println("Finished indexer: " + now.get(Calendar.HOUR_OF_DAY) + ":" + now.get(Calendar.MINUTE) + ":" + now.get(Calendar.SECOND))
     printTitleFile("sol\\search\\sol\\titles.txt", indexer.pageTitleTable)
     now = Calendar.getInstance()
-    print("Finished pageTitleTable: " + now.get(Calendar.HOUR_OF_DAY) + ":" + now.get(Calendar.MINUTE))
-    printDocumentFile("sol\\search\\sol\\docs.txt",  indexer.idsToMaxFreqs(), indexer.pageRank())
+    println("Finished pageTitleTable: " + now.get(Calendar.HOUR_OF_DAY) + ":" + now.get(Calendar.MINUTE) + ":" + now.get(Calendar.SECOND))
+    printDocumentFile("sol\\search\\sol\\docs.txt", indexer.idsToMaxFreqs(), indexer.placeHolder)
     now = Calendar.getInstance()
-    print("Finished idtoMF and pageRank: " + now.get(Calendar.HOUR_OF_DAY) + ":" + now.get(Calendar.MINUTE))
-    printWordsFile("sol\\search\\sol\\words.txt", indexer.wordsToDocumentFrequencies())
+    println("Finished idtoMF and pageRank: " + now.get(Calendar.HOUR_OF_DAY) + ":" + now.get(Calendar.MINUTE) + ":" + now.get(Calendar.SECOND))
+    printWordsFile("sol\\search\\sol\\words.txt", indexer.wordsAh())
     now = Calendar.getInstance()
-    print("Finished wordsToDF (END): " + now.get(Calendar.HOUR_OF_DAY) + ":" + now.get(Calendar.MINUTE))
+    println("Finished wordsToDF (END): " + now.get(Calendar.HOUR_OF_DAY) + ":" + now.get(Calendar.MINUTE) + ":" + now.get(Calendar.SECOND))
     //print(indexer.allWords)
     //val line = "THis is the text and words and stuff plus more [[Hammer]] [[Presidents|Washington]] [[Category:Computer Science]] rouiwbfvweui [[routines]] and [[happy|stuff]] too"
     //print(indexer.tokenize(line).mkString("Array(", ", ", ")"))
