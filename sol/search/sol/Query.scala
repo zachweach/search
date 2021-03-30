@@ -40,6 +40,12 @@ class Query(titleIndex: String, documentIndex: String, wordIndex: String,
    */
   private def query(userQuery: String) {
 
+    /**
+     * Converts a string into an array of strings that match a given Regex
+     * @param regex - the Regex to match against
+     * @param pageText - the string that will be turned into an array
+     * @return Array of Strings, representing all of the matches
+     */
     def regexToArray(regex: Regex, pageText: String): Array[String] = {
       val matchesIterator = regex.findAllMatchIn(pageText)
       matchesIterator.toArray.map { aMatch => aMatch.matched.toLowerCase }
@@ -50,12 +56,21 @@ class Query(titleIndex: String, documentIndex: String, wordIndex: String,
     val words = PorterStemmer.stemArray(justWords)
     calcRank(words)
 
-
+    /**
+     * Calculated the score of a page for a given word
+     * @param page - the page ID
+     * @param word - the word to calculate the score for
+     * @return the score of that page for the word
+     */
     def calcScore(page: Int, word: String): Double = {
       (wordsToDocumentFrequencies(word).getOrElse(page, 0.0) / idsToMaxFreqs(page)) *
         log(idsToTitle.size / wordsToDocumentFrequencies(word).size)
     }
 
+    /**
+     * calculates the ranks for all of the pages and prints the top 10 results appropriately
+     * @param queryWords - the tokenized version of the input words to query
+     */
     def calcRank(queryWords: Array[String]) {
       val idsToPageScores: mutable.Buffer[(Int, Double)] = mutable.Buffer()
 
