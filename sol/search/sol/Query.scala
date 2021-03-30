@@ -93,8 +93,8 @@ class Query(titleIndex: String, documentIndex: String, wordIndex: String,
         }
       }
 
-      val rankingList = idsToPageScores.toArray
-      rankingList.sortBy(_._2)
+      var rankingList = idsToPageScores.toArray
+      rankingList = rankingList.sortBy(_._2).reverse
 
       if (rankingList.isEmpty) {
         println("Could not find input on any pages. Try another query.")
