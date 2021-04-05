@@ -55,7 +55,6 @@ class Index(val inputFile: String) {
     // This array is then put in the "tokens" HashMap created above.
     for ((k,v) <- pageTextTable) {
       val allLinks = regexToArray(linkRegex, v) // First, we find all of the links that appear in the text
-      var linkWords: Array[String] = Array()
 
       // This for loop goes through every link and 1) properly extracts the text that should not be included in
       // the list of all words and 2) adds the proper links to pageLinksTable
@@ -67,7 +66,6 @@ class Index(val inputFile: String) {
         if (link.contains("|")) {
           val splitLink = link.split("""\|""")
           linkedPage = splitLink(0).stripPrefix("[[").toLowerCase
-          linkWords = linkWords ++: regexToArray(scaryRegex, splitLink(0))
         } else {
           linkedPage = link.stripPrefix("[[").stripSuffix("]]").toLowerCase
         }
@@ -78,14 +76,16 @@ class Index(val inputFile: String) {
             kSet = kSet + pageTitlesToIDs(linkedPage)
             pageLinksTable.put(k, kSet) // Add the link to pageLinksTable
           }
+          pageTitlesToIDs.remove(linkedPage)
         }
       }
 
       // First, we find all of the words. Then, we get rid of any words that should be excluded from links.
       // Next, stop words are removed. Lastly, all of the remaining words are stemmed and this array is added
       // to the proper spot in "tokens"
-      val words = regexToArray(scaryRegex, v).filter(!linkWords.contains(_)).filter(!StopWords.isStopWord(_))
+      val words = regexToArray(scaryRegex, v).filter(!StopWords.isStopWord(_))
       tokens.put(k, PorterStemmer.stemArray(words))
+      pageTextTable.remove(k)
     }
     tokens
   }
@@ -102,7 +102,10 @@ class Index(val inputFile: String) {
     val pageSeq: NodeSeq = mainNode \ "page"
     for (node <- pageSeq) {
       val pageID: Int = (node \ "id").text.replaceAll("\\s", "").toInt
-      val pageTag: String = (node \ tag).text.toLowerCase.trim
+      var pageTag: String = (node \ tag).text.trim
+      if (!tag.equals("title")) {
+        pageTag = pageTag.toLowerCase
+      }
       output += (pageID -> pageTag)
       if (tag.equals("title")) {
         pageTitlesToIDs += (pageTag -> pageID)
